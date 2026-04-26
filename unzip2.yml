@@ -1,0 +1,54 @@
+name: Extract and Commit ZIP
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+jobs:
+  extract-zip:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+      
+      - name: Find and extract zip file
+        run: |
+          # Cari file zip
+          zip_file=$(find . -maxdepth 2 -name "*.zip" ! -path "./.git/*" | head -1)
+          
+          if [[ -n "$zip_file" ]]; then
+            echo "📦 Menemukan file: $zip_file"
+            
+            # Ekstrak file zip
+            unzip -q "$zip_file" -d extracted/
+            
+            # Pindahkan isinya ke root folder
+            mv extracted/* . 2>/dev/null || true
+            mv extracted/.* . 2>/dev/null || true
+            
+            # Hapus folder temporary dan file zip
+            rm -rf extracted
+            rm "$zip_file"
+            
+            echo "✅ Ekstraksi selesai"
+          else
+            echo "ℹ️ Tidak ada file zip"
+          fi
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan"
+          else
+            git commit -m "Auto-extract zip file"
+            git push
+          fi
