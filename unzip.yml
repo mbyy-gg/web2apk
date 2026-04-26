@@ -1,0 +1,69 @@
+name: Ekstrak File Zip
+# Workflow ini akan berjalan secara manual atau otomatis saat ada file zip di-upload
+on:
+  # Bisa dijalankan manual dari tab Actions
+  workflow_dispatch:
+  # Menjalankan workflow secara otomatis saat ada file .zip yang di-push ke branch 'main'
+  push:
+    paths:
+      - '**.zip'
+      - '!*.zip'
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # 1. Ambil salinan terbaru dari repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install alat unzip
+      - name: Install unzip tool
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      # 3. Cari dan ekstrak file zip
+      - name: Find and Extract Zip File
+        run: |
+          # Cari file zip di root folder (selain di folder .git)
+          zip_file=$(find . -maxdepth 2 -name "*.zip" ! -path "./.git/*" ! -path "./.github/*" | head -1)
+          
+          # Jika file zip ditemukan
+          if [[ -n "$zip_file" ]]; then
+            echo "📦 Menemukan file: $zip_file"
+            
+            # Ekstrak isi zip ke folder sementara
+            temp_dir="temp_extract_$(date +%s)"
+            mkdir -p "$temp_dir"
+            unzip -q "$zip_file" -d "$temp_dir"
+            
+            # Pindahkan semua isinya ke folder utama (root) repo
+            echo "📂 Memindahkan file ke root repository..."
+            # Opsi 'n' agar tidak menimpa file yang sudah ada
+            mv -n "$temp_dir"/* ./ 2>/dev/null || true
+            mv -n "$temp_dir"/.[!.]* ./ 2>/dev/null || true
+            
+            # Hapus folder temporary dan file zip asli
+            rm -rf "$temp_dir"
+            rm "$zip_file"
+            echo "✅ Ekstraksi selesai. File zip asli telah dihapus."
+          else
+            echo "ℹ️ Tidak ada file zip yang ditemukan."
+            exit 0
+          fi
+
+      # 4. Simpan perubahan ke repository
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          # Cek apakah ada perubahan yang perlu di-commit
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan untuk di-commit."
+          else
+            git commit -m "Otomatis: Ekstrak file zip"
+            git push
+            echo "Perubahan berhasil di-push ke repository."
+          fi
